@@ -133,7 +133,7 @@ async function tryLogin() {
     const inputHash = await sha256(val);
 
     // Fetch the stored hash from Supabase site_settings table
-    const { data, error } = await supabase
+    const { data, error } = await window.db
       .from('site_settings')
       .select('value')
       .eq('key', 'admin_password_hash')
