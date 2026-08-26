@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard — P&amp;D Digital Solutions</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="admin.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+  <!-- LOGIN SCREEN -->
+  <div id="loginScreen" class="login-wrap">
+    <div class="login-box glass-panel">
+      <div class="brand-head">
+        <div class="brand-logo-icon">P&amp;D</div>
+        <h2>P&amp;D Digital Solutions</h2>
+        <p class="soft">Admin Dashboard</p>
+        <div class="login-lock-icon">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Restricted Access — Authorized Personnel Only
+        </div>
+      </div>
+      <div class="field">
+        <label for="passwordInput">Password</label>
+        <input type="password" id="passwordInput" placeholder="Enter admin password..." autocomplete="current-password">
+      </div>
+      <div id="loginError" class="error-msg">Incorrect password. Please try again.</div>
+      <button class="btn btn-primary btn-block" id="loginBtn">Enter Admin Panel</button>
+    </div>
+  </div>
+
+  <!-- DASHBOARD HEADER BAR -->
+  <header class="admin-nav" id="adminHeader" style="display: none;">
+    <div class="nav-inner">
+      <div class="bar-brand">
+        <div class="brand-logo-icon">P&amp;D</div>
+        <div class="brand-info">
+          <span class="brand-name">P&amp;D Digital Solutions</span>
+          <span class="brand-tag"><span class="status-dot"></span> Admin Control Center</span>
+        </div>
+      </div>
+
+      <!-- TABS NAVIGATION -->
+      <nav class="dash-tabs" id="dashTabs">
+        <button class="tab-btn active" data-tab="overview">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+          Overview
+        </button>
+        <button class="tab-btn" data-tab="projects">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          Projects
+        </button>
+        <button class="tab-btn" data-tab="offers">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+          Weekend Offers <span class="badge-count" id="activeOffersBadge">0</span>
+        </button>
+        <button class="tab-btn" data-tab="contact">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+          Contact Info
+        </button>
+      </nav>
+
+      <div class="nav-actions">
+        <a href="index.html" target="_blank" class="btn btn-ghost-dark btn-sm" title="View Live Website">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          View Live Site
+        </a>
+        <button class="btn btn-ghost-dark btn-sm" id="logoutBtn">Log out</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN DASHBOARD CONTENT -->
+  <main class="dash" id="dashboard">
+
+    <!-- 1. OVERVIEW TAB PANEL -->
+    <div class="tab-panel active" id="panelOverview">
+      <div class="dash-welcome">
+        <h2>Dashboard Overview</h2>
+        <p class="sub">Manage your portfolio projects, weekend promotions, and contact details seamlessly.</p>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card glass-panel">
+          <div class="stat-icon blue">📁</div>
+          <div class="stat-data">
+            <div class="stat-value" id="statTotal">0</div>
+            <div class="stat-label">Total Projects</div>
+          </div>
+        </div>
+        <div class="stat-card glass-panel">
+          <div class="stat-icon green">🔗</div>
+          <div class="stat-data">
+            <div class="stat-value" id="statLive">0</div>
+            <div class="stat-label">Live Preview Links</div>
+          </div>
+        </div>
+        <div class="stat-card glass-panel">
+          <div class="stat-icon purple">🔥</div>
+          <div class="stat-data">
+            <div class="stat-value" id="statOffers">0</div>
+            <div class="stat-label">Active Weekend Offers</div>
+          </div>
+        </div>
+        <div class="stat-card glass-panel">
+          <div class="stat-icon cyan">⚡</div>
+          <div class="stat-data">
+            <div class="stat-value" id="statSyncStatus">Synced</div>
+            <div class="stat-label">Database Sync Status</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="quick-actions-panel glass-panel">
+        <h3>Quick Actions</h3>
+        <div class="quick-btns">
+          <button class="btn btn-primary" onclick="switchTab('projects')">➕ Add New Project</button>
+          <button class="btn btn-accent" onclick="switchTab('offers')">🔥 Post Weekend Offer</button>
+          <button class="btn btn-light" onclick="switchTab('contact')">💬 Edit WhatsApp Settings</button>
+          <a href="index.html" target="_blank" class="btn btn-ghost">🌐 Preview Homepage</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. PROJECTS TAB PANEL -->
+    <div class="tab-panel" id="panelProjects">
+      <div class="dash-header">
+        <div>
+          <h2>Project Portfolio Management</h2>
+          <p class="sub">Add, edit, and organize the web projects displayed on your site.</p>
+        </div>
+        <div class="search-bar">
+          <input type="text" id="searchInput" placeholder="Search projects by title or tag...">
+        </div>
+      </div>
+
+      <div class="dash-grid">
+        <!-- Project Form Panel -->
+        <div class="panel form-panel glass-panel" id="projectFormPanel">
+          <div class="panel-head">
+            <span class="eyebrow" id="formEyebrow">Add a project</span>
+            <h3 id="formTitle">New project</h3>
+          </div>
+          <form id="projectForm" onsubmit="return false;">
+            <input type="hidden" id="editingId">
+            <div class="field">
+              <label for="pTitle">Project Title *</label>
+              <input type="text" id="pTitle" placeholder="e.g. Advanced Luxe Line Ltd" required>
+            </div>
+            <div class="field">
+              <label for="pTag">Category / Tag</label>
+              <select id="pTag">
+                <option value="Web">Web (Website)</option>
+                <option value="App">App (Web Application)</option>
+                <option value="System">System (Full-Stack / Portal)</option>
+                <option value="E-commerce">E-commerce</option>
+                <option value="Advisory">Advisory & Transformation</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="pDescription">Description</label>
+              <textarea id="pDescription" rows="3" placeholder="Brief summary of what was built and key client outcomes..."></textarea>
+            </div>
+            <div class="field">
+              <label for="pUrl">Live Project Link (URL) *</label>
+              <input type="url" id="pUrl" placeholder="https://example.com" required>
+            </div>
+            <div class="field">
+              <label for="pImageUrl">Custom Image / Screenshot URL (Optional)</label>
+              <input type="url" id="pImageUrl" placeholder="https://example.com/screenshot.jpg">
+              <small class="hint">Leave blank to automatically capture &amp; display a live website screenshot from your link.</small>
+            </div>
+            <div class="form-actions">
+              <button type="button" id="saveProjectBtn" class="btn btn-primary">
+                <span class="btn-text">Add project</span>
+                <span class="btn-spinner" style="display:none;">⏳ Publishing...</span>
+              </button>
+              <button type="button" id="cancelEditBtn" class="btn btn-light" style="display:none;">Cancel edit</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Projects List -->
+        <div class="panel list-panel glass-panel">
+          <div class="panel-head">
+            <h3>Published Projects</h3>
+            <span class="soft" id="projectsCountLabel">0 items</span>
+          </div>
+          <div id="projectsList" class="projects-list"></div>
+          <div id="emptyNote" class="empty-note" style="display:none;">No projects match your search.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. WEEKEND OFFERS & PROMOTIONS TAB PANEL -->
+    <div class="tab-panel" id="panelOffers">
+      <div class="dash-header">
+        <div>
+          <h2>Weekend Offers &amp; Special Promotions</h2>
+          <p class="sub">Post promotional cards to your website showcasing website build prices (e.g. <i>"We build custom websites from $150 up to $350"</i>).</p>
+        </div>
+      </div>
+
+      <div class="dash-grid">
+        <!-- Offer Form Panel -->
+        <div class="panel form-panel glass-panel" id="offerFormPanel">
+          <div class="panel-head">
+            <span class="eyebrow" id="offerFormEyebrow">Post Special Promotion</span>
+            <h3 id="offerFormTitle">New Weekend Offer</h3>
+          </div>
+          <form id="offerForm" onsubmit="return false;">
+            <input type="hidden" id="editingOfferId">
+            <div class="field">
+              <label for="oTitle">Offer / Package Title *</label>
+              <input type="text" id="oTitle" placeholder="e.g. Weekend Business Website Special" required>
+            </div>
+            <div class="field">
+              <label for="oBadge">Badge / Tagline</label>
+              <input type="text" id="oBadge" placeholder="e.g. 🔥 Weekend Deal - 30% OFF">
+            </div>
+            <div class="field">
+              <label for="oPriceRange">Price / Amount Range *</label>
+              <input type="text" id="oPriceRange" placeholder="e.g. $150 – $350 or 50,000 – 150,000 RWF" required>
+              <small class="hint">This displays prominently on the website offer card.</small>
+            </div>
+            <div class="field">
+              <label for="oDescription">Offer Description</label>
+              <textarea id="oDescription" rows="3" placeholder="We build high-performance custom websites tailored to make your business perfect for clients."></textarea>
+            </div>
+            <div class="field">
+              <label for="oFeatures">Included Features (Comma separated)</label>
+              <textarea id="oFeatures" rows="3" placeholder="Full Responsive Design, Mobile Friendly, Free WhatsApp Integration, SEO Setup, 1 Month Support"></textarea>
+            </div>
+            <div class="field checkbox-field">
+              <label class="toggle-switch">
+                <input type="checkbox" id="oIsActive" checked>
+                <span class="slider"></span>
+              </label>
+              <span>Publish as Active Offer on Website</span>
+            </div>
+            <div class="form-actions">
+              <button type="button" id="saveOfferBtn" class="btn btn-accent">
+                <span class="btn-text">Publish Offer</span>
+                <span class="btn-spinner" style="display:none;">⏳ Saving...</span>
+              </button>
+              <button type="button" id="cancelOfferEditBtn" class="btn btn-light" style="display:none;">Cancel edit</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Offers List Panel -->
+        <div class="panel list-panel glass-panel">
+          <div class="panel-head">
+            <h3>Active &amp; Past Promotions</h3>
+            <span class="soft" id="offersCountLabel">0 items</span>
+          </div>
+          <div id="offersList" class="offers-list"></div>
+          <div id="emptyOffersNote" class="empty-note" style="display:none;">No offers posted yet. Use the form on the left to create your first Weekend Offer!</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. CONTACT SETTINGS TAB PANEL -->
+    <div class="tab-panel" id="panelContact">
+      <div class="dash-header">
+        <div>
+          <h2>Contact &amp; WhatsApp Settings</h2>
+          <p class="sub">Update the phone numbers and messaging templates used by all WhatsApp buttons across your site.</p>
+        </div>
+      </div>
+
+      <div class="panel glass-panel max-w-2xl">
+        <form id="contactForm" onsubmit="return false;">
+          <div class="field">
+            <label for="waNumber">WhatsApp Phone Number (with Country Code, no + or spaces) *</label>
+            <input type="text" id="waNumber" placeholder="e.g. 250780000000" required>
+            <small class="hint">Example: Rwanda number 078 123 4567 &rarr; <code>250781234567</code></small>
+          </div>
+          <div class="field">
+            <label for="waMessage">Default WhatsApp Pre-filled Message</label>
+            <input type="text" id="waMessage" placeholder="Hello P&D Digital Solutions, I'd like to discuss a project.">
+          </div>
+          <div class="field">
+            <label for="emailInput">Contact Email</label>
+            <input type="email" id="emailInput" placeholder="paffdaddy06@gmail.com">
+          </div>
+          <div class="form-actions">
+            <button type="button" id="saveContactBtn" class="btn btn-primary">
+              <span class="btn-text">Save Contact Settings</span>
+              <span class="btn-spinner" style="display:none;">⏳ Saving...</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+  </main>
+
+  <footer class="admin-foot">
+    <span>P&amp;D Digital Solutions &copy; <span id="adminYear">2026</span> Control Panel</span>
+    <span class="dot">•</span>
+    <span>Local &amp; Supabase Cloud Synchronized</span>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="supabase.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>
