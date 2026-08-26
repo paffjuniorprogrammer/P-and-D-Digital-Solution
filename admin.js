@@ -329,8 +329,8 @@ async function deleteProject(id) {
   showToast('Project deleted successfully', 'success');
 
   try {
-    if (window.supabase) {
-      await withTimeout(supabase.from('projects').delete().eq('id', id));
+    if (window.db) {
+      await withTimeout(window.db.from('projects').delete().eq('id', id));
     }
   } catch (err) {
     console.warn('Supabase delete background notice:', err);
@@ -373,11 +373,11 @@ saveProjectBtn.addEventListener('click', async () => {
   resetProjectForm();
 
   try {
-    if (window.supabase) {
+    if (window.db) {
       if (editingId) {
-        await withTimeout(supabase.from('projects').update(projectData).eq('id', editingId));
+        await withTimeout(window.db.from('projects').update(projectData).eq('id', editingId));
       } else {
-        await withTimeout(supabase.from('projects').insert([projectData]));
+        await withTimeout(window.db.from('projects').insert([projectData]));
       }
     }
   } catch (err) {
@@ -479,8 +479,8 @@ async function deleteOffer(id) {
   showToast('Offer deleted successfully', 'success');
 
   try {
-    if (window.supabase) {
-      await withTimeout(supabase.from('offers').delete().eq('id', id));
+    if (window.db) {
+      await withTimeout(window.db.from('offers').delete().eq('id', id));
     }
   } catch (e) {
     console.warn('Supabase delete offer notice:', e);
@@ -526,11 +526,11 @@ saveOfferBtn.addEventListener('click', async () => {
   resetOfferForm();
 
   try {
-    if (window.supabase) {
+    if (window.db) {
       if (editingId) {
-        await withTimeout(supabase.from('offers').update(offerData).eq('id', editingId));
+        await withTimeout(window.db.from('offers').update(offerData).eq('id', editingId));
       } else {
-        await withTimeout(supabase.from('offers').insert([offerData]));
+        await withTimeout(window.db.from('offers').insert([offerData]));
       }
     }
   } catch (err) {
@@ -540,9 +540,9 @@ saveOfferBtn.addEventListener('click', async () => {
 
 /* ---------- Supabase Sync Initializer ---------- */
 async function syncWithSupabase() {
-  if (!window.supabase) return;
+  if (!window.db) return;
   try {
-    const { data: remoteProjects } = await withTimeout(supabase.from('projects').select('*').order('created_at', { ascending: false }));
+    const { data: remoteProjects } = await withTimeout(window.db.from('projects').select('*').order('created_at', { ascending: false }));
     if (remoteProjects && remoteProjects.length > 0) {
       state.projects = remoteProjects;
       saveState(state);
@@ -554,7 +554,7 @@ async function syncWithSupabase() {
   }
 
   try {
-    const { data: remoteOffers } = await withTimeout(supabase.from('offers').select('*').order('created_at', { ascending: false }));
+    const { data: remoteOffers } = await withTimeout(window.db.from('offers').select('*').order('created_at', { ascending: false }));
     if (remoteOffers && remoteOffers.length > 0) {
       state.offers = remoteOffers;
       saveState(state);

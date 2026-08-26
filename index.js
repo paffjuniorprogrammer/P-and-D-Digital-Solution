@@ -202,9 +202,9 @@ renderProjectsGrid();
 // Background Supabase sync
 async function loadProjectsFromSupabase() {
   try {
-    if (window.supabase) {
+    if (window.db) {
       const { data, error } = await withTimeout(
-        supabase.from('projects').select('*').order('created_at', { ascending: false }),
+        window.db.from('projects').select('*').order('created_at', { ascending: false }),
         2500
       );
 
@@ -286,9 +286,9 @@ renderOffersGrid();
 // Background Supabase sync
 async function loadOffersFromSupabase() {
   try {
-    if (window.supabase) {
+    if (window.db) {
       const { data, error } = await withTimeout(
-        supabase.from('offers').select('*').eq('isActive', true).order('created_at', { ascending: false }),
+        window.db.from('offers').select('*').eq('isActive', true).order('created_at', { ascending: false }),
         2500
       );
 
