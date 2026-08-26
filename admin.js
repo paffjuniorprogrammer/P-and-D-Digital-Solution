@@ -83,6 +83,22 @@ function withTimeout(promise, ms = 3000) {
   return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
 }
 
+const ADMIN_API_URL = 'https://qizmvaqpgwrxwpzrhrmm.supabase.co/functions/v1/admin-content';
+let adminToken = sessionStorage.getItem('pnd_admin_token') || '';
+
+async function callAdminApi(action, payload = {}, requiresAuth = true) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (requiresAuth && adminToken) headers.Authorization = `Bearer ${adminToken}`;
+  const response = await fetch(ADMIN_API_URL, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ action, ...payload })
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || `Admin request failed (${response.status})`);
+  return result;
+}
+
 /* ---------- DOM Elements ---------- */
 const loginScreen = document.getElementById('loginScreen');
 const adminHeader = document.getElementById('adminHeader');
@@ -129,31 +145,12 @@ async function tryLogin() {
   setLoginLoading(true);
 
   try {
-    // Hash what the user typed
-    const inputHash = await sha256(val);
-
-    // Fetch the stored hash from Supabase site_settings table
-    const { data, error } = await window.db
-      .from('site_settings')
-      .select('value')
-      .eq('key', 'admin_password_hash')
-      .single();
-
-    if (error || !data) {
-      // Show the exact Supabase error on screen so we know what to fix
-      const reason = error ? (error.message || error.code || JSON.stringify(error)) : 'No row found in site_settings';
-      showLoginError('⚠️ DB: ' + reason);
-      console.error('[Login] Supabase error:', error);
-      return;
-    }
-
-    if (inputHash === data.value) {
-      sessionStorage.setItem('pnd_admin_auth', inputHash);
-      loginError.style.display = 'none';
-      enterDashboard();
-    } else {
-      showLoginError('Incorrect password. Access denied.');
-    }
+    const result = await callAdminApi('login', { password: val }, false);
+    adminToken = result.token;
+    sessionStorage.setItem('pnd_admin_token', adminToken);
+    sessionStorage.setItem('pnd_admin_auth', 'server-session');
+    loginError.style.display = 'none';
+    await enterDashboard();
   } catch (err) {
     showLoginError('⚠️ ' + (err.message || String(err)));
     console.error('[Login] Exception:', err);
@@ -181,6 +178,8 @@ async function enterDashboard() {
 
 logoutBtn.addEventListener('click', () => {
   sessionStorage.removeItem('pnd_admin_auth');
+  sessionStorage.removeItem('pnd_admin_token');
+  adminToken = '';
   loginScreen.style.display = 'flex';
   adminHeader.style.display = 'none';
   dashboard.classList.remove('show');
@@ -216,7 +215,7 @@ function renderContact() {
   document.getElementById('emailInput').value = state.contact.email || '';
 }
 
-document.getElementById('saveContactBtn').addEventListener('click', () => {
+document.getElementById('saveContactBtn').addEventListener('click', async () => {
   const num = document.getElementById('waNumber').value.trim();
   if (!num) {
     showToast('Please enter a valid WhatsApp number', 'error');
@@ -229,8 +228,17 @@ document.getElementById('saveContactBtn').addEventListener('click', () => {
     email: document.getElementById('emailInput').value.trim()
   };
   
-  saveState(state);
-  showToast('Contact settings saved successfully!', 'success');
+  try {
+    await Promise.all([
+      callAdminApi('contact.upsert', { record: { key: 'whatsappNumber', value: num } }),
+      callAdminApi('contact.upsert', { record: { key: 'whatsappMessage', value: state.contact.whatsappMessage } }),
+      callAdminApi('contact.upsert', { record: { key: 'email', value: state.contact.email } })
+    ]);
+    saveState(state);
+    showToast('Contact settings saved to database!', 'success');
+  } catch (err) {
+    showToast('Contact settings were not saved: ' + err.message, 'error');
+  }
 });
 
 /* ---------- Projects Management ---------- */
@@ -330,11 +338,9 @@ async function deleteProject(id) {
   showToast('Project deleted successfully', 'success');
 
   try {
-    if (window.db) {
-      await withTimeout(window.db.from('projects').delete().eq('id', id));
-    }
+    await callAdminApi('projects.delete', { id });
   } catch (err) {
-    console.warn('Supabase delete background notice:', err);
+    showToast('Project database delete failed: ' + err.message, 'error');
   }
 }
 
@@ -356,14 +362,14 @@ saveProjectBtn.addEventListener('click', async () => {
   };
 
   const editingId = editingIdInput.value;
+  const record = { id: editingId || 'p_' + Date.now(), ...projectData };
 
   if (editingId) {
     const idx = state.projects.findIndex(p => String(p.id) === String(editingId));
     if (idx > -1) state.projects[idx] = { ...state.projects[idx], ...projectData };
     showToast('Project changes saved successfully!', 'success');
   } else {
-    const newId = 'p_' + Date.now();
-    const newProject = { id: newId, ...projectData };
+    const newProject = record;
     state.projects.unshift(newProject);
     showToast('New project published successfully!', 'success');
   }
@@ -374,15 +380,9 @@ saveProjectBtn.addEventListener('click', async () => {
   resetProjectForm();
 
   try {
-    if (window.db) {
-      if (editingId) {
-        await withTimeout(window.db.from('projects').update(projectData).eq('id', editingId));
-      } else {
-        await withTimeout(window.db.from('projects').insert([projectData]));
-      }
-    }
+    await callAdminApi('projects.upsert', { record });
   } catch (err) {
-    console.warn('Supabase sync notice:', err.message);
+    showToast('Project database save failed: ' + err.message, 'error');
   }
 });
 
@@ -459,14 +459,20 @@ function resetOfferForm() {
 
 cancelOfferEditBtn.addEventListener('click', resetOfferForm);
 
-function toggleOfferActive(id) {
+async function toggleOfferActive(id) {
   const idx = state.offers.findIndex(o => String(o.id) === String(id));
   if (idx > -1) {
     state.offers[idx].isActive = !state.offers[idx].isActive;
-    saveState(state);
-    renderOffers();
-    updateStats();
-    showToast(`Offer ${state.offers[idx].isActive ? 'activated' : 'paused'}`, 'info');
+    try {
+      await callAdminApi('offers.upsert', { record: state.offers[idx] });
+      saveState(state);
+      renderOffers();
+      updateStats();
+      showToast(`Offer ${state.offers[idx].isActive ? 'activated' : 'paused'}`, 'info');
+    } catch (err) {
+      state.offers[idx].isActive = !state.offers[idx].isActive;
+      showToast('Offer status was not saved: ' + err.message, 'error');
+    }
   }
 }
 
@@ -480,11 +486,9 @@ async function deleteOffer(id) {
   showToast('Offer deleted successfully', 'success');
 
   try {
-    if (window.db) {
-      await withTimeout(window.db.from('offers').delete().eq('id', id));
-    }
+    await callAdminApi('offers.delete', { id });
   } catch (e) {
-    console.warn('Supabase delete offer notice:', e);
+    showToast('Offer database delete failed: ' + e.message, 'error');
   }
 }
 
@@ -510,13 +514,14 @@ saveOfferBtn.addEventListener('click', async () => {
   };
 
   const editingId = editingOfferIdInput.value;
+  const record = { id: editingId || 'off_' + Date.now(), ...offerData };
 
   if (editingId) {
     const idx = state.offers.findIndex(o => String(o.id) === String(editingId));
     if (idx > -1) state.offers[idx] = { ...state.offers[idx], ...offerData };
     showToast('Offer changes saved successfully!', 'success');
   } else {
-    const newOffer = { id: 'off_' + Date.now(), ...offerData };
+    const newOffer = record;
     state.offers.unshift(newOffer);
     showToast('Weekend Offer published successfully!', 'success');
   }
@@ -527,43 +532,49 @@ saveOfferBtn.addEventListener('click', async () => {
   resetOfferForm();
 
   try {
-    if (window.db) {
-      if (editingId) {
-        await withTimeout(window.db.from('offers').update(offerData).eq('id', editingId));
-      } else {
-        await withTimeout(window.db.from('offers').insert([offerData]));
-      }
-    }
+    await callAdminApi('offers.upsert', { record });
   } catch (err) {
-    console.warn('Supabase sync offer notice:', err.message);
+    showToast('Offer database save failed: ' + err.message, 'error');
   }
 });
 
 /* ---------- Supabase Sync Initializer ---------- */
 async function syncWithSupabase() {
-  if (!window.db) return;
+  if (!adminToken) return;
   try {
-    const { data: remoteProjects } = await withTimeout(window.db.from('projects').select('*').order('created_at', { ascending: false }));
-    if (remoteProjects && remoteProjects.length > 0) {
-      state.projects = remoteProjects;
+    const projectsResult = await callAdminApi('projects.list');
+    if (projectsResult.data) {
+      state.projects = projectsResult.data;
       saveState(state);
       renderProjects();
       updateStats();
     }
   } catch (e) {
-    console.log('Using local projects state');
+    showToast('Could not load database projects: ' + e.message, 'error');
   }
 
   try {
-    const { data: remoteOffers } = await withTimeout(window.db.from('offers').select('*').order('created_at', { ascending: false }));
-    if (remoteOffers && remoteOffers.length > 0) {
-      state.offers = remoteOffers;
+    const offersResult = await callAdminApi('offers.list');
+    if (offersResult.data) {
+      state.offers = offersResult.data;
       saveState(state);
       renderOffers();
       updateStats();
     }
   } catch (e) {
-    console.log('Using local offers state');
+    showToast('Could not load database offers: ' + e.message, 'error');
+  }
+
+  try {
+    const contactResult = await callAdminApi('contact.list');
+    const contact = Object.fromEntries((contactResult.data || []).map(row => [row.key, row.value]));
+    if (Object.keys(contact).length) {
+      state.contact = { ...state.contact, ...contact };
+      saveState(state);
+      renderContact();
+    }
+  } catch (e) {
+    showToast('Could not load database contact settings: ' + e.message, 'error');
   }
 }
 
@@ -581,7 +592,8 @@ document.getElementById('adminYear').textContent = new Date().getFullYear();
 
 // Only auto-enter dashboard if already authenticated this browser session
 const _storedAuth = sessionStorage.getItem('pnd_admin_auth');
-if (_storedAuth && _storedAuth.length === 64) {
+const _storedToken = sessionStorage.getItem('pnd_admin_token');
+if (_storedAuth && _storedToken) {
   // Valid SHA-256 hash stored — resume session without re-login
   enterDashboard();
 } else {

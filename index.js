@@ -81,12 +81,20 @@ let PROJECTS = (localState.projects && localState.projects.length > 0) ? localSt
 let OFFERS = (localState.offers && localState.offers.length > 0) ? localState.offers : DEFAULT_OFFERS;
 
 // Set Footer Year & Contact Links
-document.getElementById('footerYear').textContent = "© " + new Date().getFullYear() + " P&D Digital Solutions. All rights reserved.";
+ document.getElementById('footerYear').textContent = "© " + new Date().getFullYear() + " P&D Digital Solutions. All rights reserved.";
 
-const waLink = "https://wa.me/" + CONFIG.whatsappNumber + "?text=" + encodeURIComponent(CONFIG.whatsappMessage);
-if (document.getElementById('waNavBtn')) document.getElementById('waNavBtn').href = waLink;
-if (document.getElementById('waContactBtn')) document.getElementById('waContactBtn').href = waLink;
-if (document.getElementById('waDisplay')) document.getElementById('waDisplay').textContent = "+" + CONFIG.whatsappNumber;
+function applyContactConfig() {
+  const waLink = "https://wa.me/" + CONFIG.whatsappNumber + "?text=" + encodeURIComponent(CONFIG.whatsappMessage);
+  if (document.getElementById('waNavBtn')) document.getElementById('waNavBtn').href = waLink;
+  if (document.getElementById('waContactBtn')) document.getElementById('waContactBtn').href = waLink;
+  if (document.getElementById('waDisplay')) document.getElementById('waDisplay').textContent = "+" + CONFIG.whatsappNumber;
+  const emailLink = document.querySelector('a[href^="mailto:"]');
+  if (emailLink) {
+    emailLink.href = `mailto:${CONFIG.email}`;
+    emailLink.textContent = CONFIG.email;
+  }
+}
+applyContactConfig();
 
 // Build marquee strip
 const stripItems = ["Websites", "Web apps", "Full-stack systems", "Digital transformation advisory", "Google Business Profile setup", "Social media management"];
@@ -251,6 +259,23 @@ async function loadProjectsFromSupabase() {
   }
 }
 loadProjectsFromSupabase();
+
+async function loadContactFromSupabase() {
+  try {
+    if (!window.db) return;
+    const { data, error } = await withTimeout(
+      window.db.from('public_contact_settings').select('key,value').limit(20),
+      2500
+    );
+    if (!error && data && data.length > 0) {
+      Object.assign(CONFIG, Object.fromEntries(data.map(row => [row.key, row.value])));
+      applyContactConfig();
+    }
+  } catch (e) {
+    console.log("Using local/default contact settings");
+  }
+}
+loadContactFromSupabase();
 
 /* ---------- Render Special Offers Grid ---------- */
 const offersGrid = document.getElementById('offersGrid');
