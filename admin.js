@@ -167,6 +167,7 @@ passwordInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') tryLog
 
 async function enterDashboard() {
   loginScreen.style.display = 'none';
+  dashboard.style.display = '';
   adminHeader.style.display = 'block';
   dashboard.classList.add('show');
   
