@@ -97,36 +97,68 @@ if (stripTrack) {
 }
 
 // Thumbnail helpers
+function normalizeProjectUrl(url) {
+  const value = String(url || '').trim();
+  if (!value || value === '#') return '';
+  if (/^https?:\/\//i.test(value)) return value;
+  if (/^(www\.)?[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9-]+)+(?::\d+)?(?:[/?#].*)?$/i.test(value)) {
+    return 'https://' + value;
+  }
+  return value;
+}
+
 function isRealLink(url) {
-  return url && url !== "#" && /^https?:\/\//i.test(url);
+  return /^https?:\/\//i.test(normalizeProjectUrl(url));
+}
+
+const LOCAL_PREVIEWS = {
+  'pafly.rw': 'assets/pafly-rw-homepage.webp',
+  'www.pafly.rw': 'assets/pafly-rw-homepage.webp'
+};
+
+function getLocalPreview(p) {
+  const normalizedUrl = normalizeProjectUrl(p.url);
+  if (!normalizedUrl) return '';
+  try {
+    return LOCAL_PREVIEWS[new URL(normalizedUrl).hostname.toLowerCase()] || '';
+  } catch (e) {
+    return '';
+  }
 }
 
 function getPrimaryThumb(p) {
+  const projectUrl = normalizeProjectUrl(p.url);
   // Use custom image if provided by admin
   if (p.imageUrl && /^https?:\/\//i.test(p.imageUrl)) {
     return p.imageUrl;
   }
-  if (isRealLink(p.url)) {
-    // Primary: image.thum.io — free, no API key needed, reliable
-    return "https://image.thum.io/get/width/800/crop/600/noanimate/" + p.url;
+  // Prefer the bundled homepage capture for PAFly so a blank remote capture
+  // cannot be treated as a successful preview.
+  const localPreview = getLocalPreview(p);
+  if (localPreview) return localPreview;
+  if (isRealLink(projectUrl)) {
+    // Primary: image.thum.io — free, no API key needed
+    return "https://image.thum.io/get/width/800/crop/600/noanimate/" + projectUrl;
   }
-  return "";
+  return getLocalPreview(p);
 }
 
 function getSecondaryThumb(p) {
-  if (isRealLink(p.url)) {
+  const projectUrl = normalizeProjectUrl(p.url);
+  if (isRealLink(projectUrl)) {
     // Secondary: WordPress mshots — free, no API key needed
-    return "https://s.wordpress.com/mshots/v1/" + encodeURIComponent(p.url) + "?w=800&h=500";
+    return "https://s.wordpress.com/mshots/v1/" + encodeURIComponent(projectUrl) + "?w=800&h=500";
   }
-  return "";
+  return getLocalPreview(p);
 }
 
 function getTertiaryThumb(p) {
-  if (isRealLink(p.url)) {
+  const projectUrl = normalizeProjectUrl(p.url);
+  if (isRealLink(projectUrl)) {
     // Tertiary: thum.io alternate format
-    return "https://image.thum.io/get/width/800/" + p.url;
+    return "https://image.thum.io/get/width/800/" + projectUrl;
   }
-  return "";
+  return getLocalPreview(p);
 }
 
 function escapeHtml(str) {
@@ -147,13 +179,14 @@ function renderProjectsGrid() {
   const displayList = (PROJECTS && PROJECTS.length > 0) ? PROJECTS : DEFAULT_PROJECTS;
 
   grid.innerHTML = displayList.map(p => {
-    const hasLink = isRealLink(p.url);
+    const projectUrl = normalizeProjectUrl(p.url);
+    const hasLink = isRealLink(projectUrl);
     const cardClass = hasLink ? "project-card" : "project-card placeholder";
     const primaryImg = getPrimaryThumb(p);
     const secondaryImg = getSecondaryThumb(p);
     const tertiaryImg = getTertiaryThumb(p);
-    const fallbackTechImg = "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&auto=format&fit=crop";
-    const domainHost = hasLink ? p.url.replace(/^https?:\/\//i, '').split('/')[0] : 'website.com';
+    const fallbackTechImg = getLocalPreview(p) || "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&auto=format&fit=crop";
+    const domainHost = hasLink ? new URL(projectUrl).host : 'website.com';
 
     const thumb = hasLink
       ? `<div class="browser-bar" aria-hidden="true">
@@ -176,7 +209,7 @@ function renderProjectsGrid() {
          </div>`;
 
     return `
-    <a class="${cardClass}" href="${p.url}" target="_blank" rel="noopener">
+    <a class="${cardClass}" href="${hasLink ? projectUrl : '#'}" target="_blank" rel="noopener">
       <div class="project-thumb">
         <span class="project-tag">${escapeHtml(p.tag || 'Web')}</span>
         ${thumb}
