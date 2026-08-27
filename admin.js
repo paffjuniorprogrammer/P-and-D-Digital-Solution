@@ -1,60 +1,13 @@
 /* =========================================================
    P&D Digital Solutions — Admin Dashboard Logic (v3.1)
-   Instant Feedback & Resilient Supabase/LocalStorage Sync
+   Database-only content management
    ========================================================= */
 
-const DEFAULT_CONTACT = {
-  whatsappNumber: "250780000000",
-  whatsappMessage: "Hello P&D Digital Solutions, I'd like to talk about a project.",
-  email: "paffdaddy06@gmail.com"
+let state = {
+  contact: { whatsappNumber: '', whatsappMessage: '', email: '' },
+  projects: [],
+  offers: []
 };
-
-const DEFAULT_PROJECTS = [
-  { id: "p1", title: "Advanced Luxe Line Ltd", tag: "Web", description: "Hospitality and relaxation establishment in Musanze, Rwanda, offering luxury rooms, sauna, massage, pool snooker, and fine dining.", url: "https://advancedluxeline.com", imageUrl: "" },
-  { id: "p2", title: "Corporate Enterprise Portal", tag: "System", description: "Full-stack client management portal with real-time analytics and automated invoicing.", url: "https://example.com", imageUrl: "" },
-  { id: "p3", title: "Modern SaaS Web Application", tag: "App", description: "Responsive web application with user dashboard, payment gateway, and role permissions.", url: "https://example.com", imageUrl: "" }
-];
-
-const DEFAULT_OFFERS = [
-  {
-    id: "off1",
-    title: "Weekend Promotion: Custom Business Website",
-    badge: "🔥 Weekend Special",
-    priceRange: "$150 – $350",
-    description: "We build high-performance custom websites for amount up to amount to make your business perfect for clients.",
-    features: ["Full Responsive Design", "Fast Loading & Mobile Friendly", "Free WhatsApp Integration", "SEO & Search Engine Setup", "1 Month Technical Support"],
-    isActive: true
-  }
-];
-
-const STORAGE_KEY = "pnd_admin_state_v1";
-
-function loadState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      return {
-        contact: { ...DEFAULT_CONTACT, ...(parsed.contact || {}) },
-        projects: parsed.projects || DEFAULT_PROJECTS,
-        offers: parsed.offers || DEFAULT_OFFERS
-      };
-    }
-  } catch (e) {
-    console.error("Error reading localStorage:", e);
-  }
-  return { contact: DEFAULT_CONTACT, projects: DEFAULT_PROJECTS, offers: DEFAULT_OFFERS };
-}
-
-function saveState(state) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch (e) {
-    console.error("Error saving state to localStorage:", e);
-  }
-}
-
-let state = loadState();
 
 /* ---------- Toast Notification System ---------- */
 function showToast(message, type = 'success') {
@@ -84,7 +37,7 @@ function withTimeout(promise, ms = 3000) {
 }
 
 const ADMIN_API_URL = 'https://qizmvaqpgwrxwpzrhrmm.supabase.co/functions/v1/admin-content';
-let adminToken = sessionStorage.getItem('pnd_admin_token') || '';
+let adminToken = '';
 
 async function callAdminApi(action, payload = {}, requiresAuth = true) {
   const headers = { 'Content-Type': 'application/json' };
@@ -147,8 +100,6 @@ async function tryLogin() {
   try {
     const result = await callAdminApi('login', { password: val }, false);
     adminToken = result.token;
-    sessionStorage.setItem('pnd_admin_token', adminToken);
-    sessionStorage.setItem('pnd_admin_auth', 'server-session');
     loginError.style.display = 'none';
     await enterDashboard();
   } catch (err) {
@@ -168,17 +119,14 @@ async function enterDashboard() {
   adminHeader.style.display = 'block';
   dashboard.classList.add('show');
   
+  await syncWithSupabase();
   renderContact();
   renderProjects();
   renderOffers();
   updateStats();
-
-  syncWithSupabase();
 }
 
 logoutBtn.addEventListener('click', () => {
-  sessionStorage.removeItem('pnd_admin_auth');
-  sessionStorage.removeItem('pnd_admin_token');
   adminToken = '';
   loginScreen.style.display = 'flex';
   adminHeader.style.display = 'none';
@@ -222,19 +170,20 @@ document.getElementById('saveContactBtn').addEventListener('click', async () => 
     return;
   }
   
-  state.contact = {
+  const nextContact = {
     whatsappNumber: num,
     whatsappMessage: document.getElementById('waMessage').value.trim(),
     email: document.getElementById('emailInput').value.trim()
   };
-  
+
   try {
     await Promise.all([
-      callAdminApi('contact.upsert', { record: { key: 'whatsappNumber', value: num } }),
-      callAdminApi('contact.upsert', { record: { key: 'whatsappMessage', value: state.contact.whatsappMessage } }),
-      callAdminApi('contact.upsert', { record: { key: 'email', value: state.contact.email } })
+      callAdminApi('contact.upsert', { record: { key: 'whatsappNumber', value: nextContact.whatsappNumber } }),
+      callAdminApi('contact.upsert', { record: { key: 'whatsappMessage', value: nextContact.whatsappMessage } }),
+      callAdminApi('contact.upsert', { record: { key: 'email', value: nextContact.email } })
     ]);
-    saveState(state);
+    state.contact = nextContact;
+    renderContact();
     showToast('Contact settings saved to database!', 'success');
   } catch (err) {
     showToast('Contact settings were not saved: ' + err.message, 'error');
@@ -331,14 +280,12 @@ cancelEditBtn.addEventListener('click', resetProjectForm);
 async function deleteProject(id) {
   if (!confirm('Are you sure you want to delete this project?')) return;
 
-  state.projects = state.projects.filter(p => String(p.id) !== String(id));
-  saveState(state);
-  renderProjects();
-  updateStats();
-  showToast('Project deleted successfully', 'success');
-
   try {
     await callAdminApi('projects.delete', { id });
+    await syncWithSupabase();
+    renderProjects();
+    updateStats();
+    showToast('Project deleted successfully', 'success');
   } catch (err) {
     showToast('Project database delete failed: ' + err.message, 'error');
   }
@@ -364,23 +311,13 @@ saveProjectBtn.addEventListener('click', async () => {
   const editingId = editingIdInput.value;
   const record = { id: editingId || 'p_' + Date.now(), ...projectData };
 
-  if (editingId) {
-    const idx = state.projects.findIndex(p => String(p.id) === String(editingId));
-    if (idx > -1) state.projects[idx] = { ...state.projects[idx], ...projectData };
-    showToast('Project changes saved successfully!', 'success');
-  } else {
-    const newProject = record;
-    state.projects.unshift(newProject);
-    showToast('New project published successfully!', 'success');
-  }
-
-  saveState(state);
-  renderProjects();
-  updateStats();
-  resetProjectForm();
-
   try {
     await callAdminApi('projects.upsert', { record });
+    await syncWithSupabase();
+    renderProjects();
+    updateStats();
+    resetProjectForm();
+    showToast(editingId ? 'Project changes saved successfully!' : 'New project published successfully!', 'success');
   } catch (err) {
     showToast('Project database save failed: ' + err.message, 'error');
   }
@@ -460,33 +397,30 @@ function resetOfferForm() {
 cancelOfferEditBtn.addEventListener('click', resetOfferForm);
 
 async function toggleOfferActive(id) {
-  const idx = state.offers.findIndex(o => String(o.id) === String(id));
-  if (idx > -1) {
-    state.offers[idx].isActive = !state.offers[idx].isActive;
-    try {
-      await callAdminApi('offers.upsert', { record: state.offers[idx] });
-      saveState(state);
-      renderOffers();
-      updateStats();
-      showToast(`Offer ${state.offers[idx].isActive ? 'activated' : 'paused'}`, 'info');
-    } catch (err) {
-      state.offers[idx].isActive = !state.offers[idx].isActive;
-      showToast('Offer status was not saved: ' + err.message, 'error');
-    }
+  const offer = state.offers.find(item => String(item.id) === String(id));
+  if (!offer) return;
+
+  const record = { ...offer, isActive: !offer.isActive };
+  try {
+    await callAdminApi('offers.upsert', { record });
+    await syncWithSupabase();
+    renderOffers();
+    updateStats();
+    showToast(`Offer ${record.isActive ? 'activated' : 'paused'}`, 'info');
+  } catch (err) {
+    showToast('Offer status was not saved: ' + err.message, 'error');
   }
 }
 
 async function deleteOffer(id) {
   if (!confirm('Are you sure you want to delete this offer?')) return;
 
-  state.offers = state.offers.filter(o => String(o.id) !== String(id));
-  saveState(state);
-  renderOffers();
-  updateStats();
-  showToast('Offer deleted successfully', 'success');
-
   try {
     await callAdminApi('offers.delete', { id });
+    await syncWithSupabase();
+    renderOffers();
+    updateStats();
+    showToast('Offer deleted successfully', 'success');
   } catch (e) {
     showToast('Offer database delete failed: ' + e.message, 'error');
   }
@@ -516,23 +450,13 @@ saveOfferBtn.addEventListener('click', async () => {
   const editingId = editingOfferIdInput.value;
   const record = { id: editingId || 'off_' + Date.now(), ...offerData };
 
-  if (editingId) {
-    const idx = state.offers.findIndex(o => String(o.id) === String(editingId));
-    if (idx > -1) state.offers[idx] = { ...state.offers[idx], ...offerData };
-    showToast('Offer changes saved successfully!', 'success');
-  } else {
-    const newOffer = record;
-    state.offers.unshift(newOffer);
-    showToast('Weekend Offer published successfully!', 'success');
-  }
-
-  saveState(state);
-  renderOffers();
-  updateStats();
-  resetOfferForm();
-
   try {
     await callAdminApi('offers.upsert', { record });
+    await syncWithSupabase();
+    renderOffers();
+    updateStats();
+    resetOfferForm();
+    showToast(editingId ? 'Offer changes saved successfully!' : 'Weekend Offer published successfully!', 'success');
   } catch (err) {
     showToast('Offer database save failed: ' + err.message, 'error');
   }
@@ -545,7 +469,6 @@ async function syncWithSupabase() {
     const projectsResult = await callAdminApi('projects.list');
     if (projectsResult.data) {
       state.projects = projectsResult.data;
-      saveState(state);
       renderProjects();
       updateStats();
     }
@@ -557,7 +480,6 @@ async function syncWithSupabase() {
     const offersResult = await callAdminApi('offers.list');
     if (offersResult.data) {
       state.offers = offersResult.data;
-      saveState(state);
       renderOffers();
       updateStats();
     }
@@ -570,7 +492,6 @@ async function syncWithSupabase() {
     const contact = Object.fromEntries((contactResult.data || []).map(row => [row.key, row.value]));
     if (Object.keys(contact).length) {
       state.contact = { ...state.contact, ...contact };
-      saveState(state);
       renderContact();
     }
   } catch (e) {
@@ -590,16 +511,8 @@ function escapeHtml(str) {
 
 document.getElementById('adminYear').textContent = new Date().getFullYear();
 
-// Only auto-enter dashboard if already authenticated this browser session
-const _storedAuth = sessionStorage.getItem('pnd_admin_auth');
-const _storedToken = sessionStorage.getItem('pnd_admin_token');
-if (_storedAuth && _storedToken) {
-  // Valid SHA-256 hash stored — resume session without re-login
-  enterDashboard();
-} else {
-  // Show login screen
-  loginScreen.style.display = 'flex';
-  adminHeader.style.display = 'none';
-  dashboard.style.display = 'none';
-  setTimeout(() => passwordInput.focus(), 300);
-}
+// Content and authentication are intentionally not restored from browser storage.
+loginScreen.style.display = 'flex';
+adminHeader.style.display = 'none';
+dashboard.style.display = 'none';
+setTimeout(() => passwordInput.focus(), 300);

@@ -1,110 +1,35 @@
-/* =========================================================
-   P&D Digital Solutions — Main Website Logic (v3.3)
-   Multi-Fallback Live Screenshot Engine & Instant Rendering
+/*
+   P&D Digital Solutions — Public Website Logic
+   Database-only content hydration
    ========================================================= */
 
-// Default Fallbacks
-const DEFAULT_CONFIG = {
-  whatsappNumber: "250780000000",
-  whatsappMessage: "Hello P&D Digital Solutions, I'd like to discuss a project.",
-  email: "paffdaddy06@gmail.com"
+const DATA_LOAD_TIMEOUT = 10000;
+const CONFIG = {
+  whatsappNumber: '',
+  whatsappMessage: '',
+  email: ''
 };
+let PROJECTS = [];
+let OFFERS = [];
+let contentStatus = 'loading';
 
-const DEFAULT_PROJECTS = [
-  { 
-    id: "p1", 
-    title: "Advanced Luxe Line Ltd", 
-    tag: "Web", 
-    description: "Advanced Luxe Line Ltd is a hospitality and relaxation establishment in Musanze, Rwanda, offering luxury rooms, a sauna and massage center, pool snooker, and a dining spot known for nyama choma and chilled drinks.", 
-    url: "https://advancedluxeline.com", 
-    imageUrl: "" 
-  },
-  { 
-    id: "p2", 
-    title: "Corporate Enterprise Portal", 
-    tag: "System", 
-    description: "Full-stack client management portal with real-time analytics, booking management, and automated invoicing.", 
-    url: "https://example.com", 
-    imageUrl: "" 
-  },
-  { 
-    id: "p3", 
-    title: "Modern SaaS Web Application", 
-    tag: "App", 
-    description: "Responsive web application with interactive user dashboard, payment gateway, and role permissions.", 
-    url: "https://example.com", 
-    imageUrl: "" 
-  }
-];
-
-const DEFAULT_OFFERS = [
-  {
-    id: "off1",
-    title: "Weekend Promotion: Custom Business Website",
-    badge: "🔥 Weekend Special",
-    priceRange: "$150 – $350",
-    description: "We build high-performance custom websites for amount up to amount to make your business perfect for clients.",
-    features: [
-      "Full Responsive Mobile & Desktop Design",
-      "Fast Page Load & Google SEO Setup",
-      "Direct WhatsApp & Contact Form Integration",
-      "Custom Domain & Free Hosting Setup",
-      "1 Month Free Technical Support"
-    ],
-    isActive: true
-  }
-];
-
-// Helper: Timeout wrapper for Supabase requests
-function withTimeout(promise, ms = 2500) {
+function withTimeout(promise, ms = DATA_LOAD_TIMEOUT) {
   let timeoutId;
   const timeoutPromise = new Promise((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error('Timeout')), ms);
+    timeoutId = setTimeout(() => reject(new Error('Database request timed out')), ms);
   });
   return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
 }
 
-// Read config & state from Local Storage if modified in Admin Panel
-function getLocalState() {
-  try {
-    const raw = localStorage.getItem("pnd_admin_state_v1");
-    if (raw) return JSON.parse(raw);
-  } catch (e) {
-    console.warn("Using default site configuration");
-  }
-  return {};
+function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
-const localState = getLocalState();
-const CONFIG = { ...DEFAULT_CONFIG, ...(localState.contact || {}) };
-let PROJECTS = (localState.projects && localState.projects.length > 0) ? localState.projects : DEFAULT_PROJECTS;
-let OFFERS = (localState.offers && localState.offers.length > 0) ? localState.offers : DEFAULT_OFFERS;
-
-// Set Footer Year & Contact Links
- document.getElementById('footerYear').textContent = "© " + new Date().getFullYear() + " P&D Digital Solutions. All rights reserved.";
-
-function applyContactConfig() {
-  const waLink = "https://wa.me/" + CONFIG.whatsappNumber + "?text=" + encodeURIComponent(CONFIG.whatsappMessage);
-  if (document.getElementById('waNavBtn')) document.getElementById('waNavBtn').href = waLink;
-  if (document.getElementById('waContactBtn')) document.getElementById('waContactBtn').href = waLink;
-  if (document.getElementById('waDisplay')) document.getElementById('waDisplay').textContent = "+" + CONFIG.whatsappNumber;
-  const emailLink = document.querySelector('a[href^="mailto:"]');
-  if (emailLink) {
-    emailLink.href = `mailto:${CONFIG.email}`;
-    emailLink.textContent = CONFIG.email;
-  }
-}
-applyContactConfig();
-
-// Build marquee strip
-const stripItems = ["Websites", "Web apps", "Full-stack systems", "Digital transformation advisory", "Google Business Profile setup", "Social media management"];
-const stripTrack = document.getElementById('stripTrack');
-if (stripTrack) {
-  const stripHtml = stripItems.map(i => `<span>${i}</span><span aria-hidden="true">·</span>`).join('');
-  stripTrack.innerHTML = stripHtml + stripHtml;
-}
-
-// Thumbnail helpers
 function normalizeProjectUrl(url) {
   const value = String(url || '').trim();
   if (!value || value === '#') return '';
@@ -119,277 +44,245 @@ function isRealLink(url) {
   return /^https?:\/\//i.test(normalizeProjectUrl(url));
 }
 
-const LOCAL_PREVIEWS = {
-  'pafly.rw': 'assets/pafly-rw-homepage.webp',
-  'www.pafly.rw': 'assets/pafly-rw-homepage.webp'
-};
-
-function getLocalPreview(p) {
-  const normalizedUrl = normalizeProjectUrl(p.url);
-  if (!normalizedUrl) return '';
+function getProjectHost(url) {
   try {
-    return LOCAL_PREVIEWS[new URL(normalizedUrl).hostname.toLowerCase()] || '';
-  } catch (e) {
+    return new URL(url).host;
+  } catch (_) {
     return '';
   }
 }
 
-function getPrimaryThumb(p) {
-  const projectUrl = normalizeProjectUrl(p.url);
-  // Use custom image if provided by admin
-  if (p.imageUrl && /^https?:\/\//i.test(p.imageUrl)) {
-    return p.imageUrl;
+function getPrimaryThumb(project) {
+  if (project.imageUrl && /^https?:\/\//i.test(project.imageUrl)) {
+    return project.imageUrl;
   }
-  // Prefer the bundled homepage capture for PAFly so a blank remote capture
-  // cannot be treated as a successful preview.
-  const localPreview = getLocalPreview(p);
-  if (localPreview) return localPreview;
-  if (isRealLink(projectUrl)) {
-    // Primary: image.thum.io — free, no API key needed
-    return "https://image.thum.io/get/width/800/crop/600/noanimate/" + projectUrl;
-  }
-  return getLocalPreview(p);
+  const projectUrl = normalizeProjectUrl(project.url);
+  return isRealLink(projectUrl)
+    ? 'https://image.thum.io/get/width/800/crop/600/noanimate/' + projectUrl
+    : '';
 }
 
-function getSecondaryThumb(p) {
-  const projectUrl = normalizeProjectUrl(p.url);
-  if (isRealLink(projectUrl)) {
-    // Secondary: WordPress mshots — free, no API key needed
-    return "https://s.wordpress.com/mshots/v1/" + encodeURIComponent(projectUrl) + "?w=800&h=500";
-  }
-  return getLocalPreview(p);
+function getSecondaryThumb(project) {
+  const projectUrl = normalizeProjectUrl(project.url);
+  return isRealLink(projectUrl)
+    ? 'https://s.wordpress.com/mshots/v1/' + encodeURIComponent(projectUrl) + '?w=800&h=500'
+    : '';
 }
 
-function getTertiaryThumb(p) {
-  const projectUrl = normalizeProjectUrl(p.url);
-  if (isRealLink(projectUrl)) {
-    // Tertiary: thum.io alternate format
-    return "https://image.thum.io/get/width/800/" + projectUrl;
-  }
-  return getLocalPreview(p);
+function getTertiaryThumb(project) {
+  const projectUrl = normalizeProjectUrl(project.url);
+  return isRealLink(projectUrl)
+    ? 'https://image.thum.io/get/width/800/' + projectUrl
+    : '';
 }
 
-function escapeHtml(str) {
-  return String(str || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+function setText(id, value) {
+  const element = document.getElementById(id);
+  if (element) element.textContent = value;
 }
 
-/* ---------- Render Projects Grid ---------- */
-const grid = document.getElementById('projectsGrid');
+function applyContactConfig() {
+  const number = String(CONFIG.whatsappNumber || '').trim();
+  const message = String(CONFIG.whatsappMessage || '').trim();
+  const email = String(CONFIG.email || '').trim();
+  const hasWhatsApp = Boolean(number);
+  const hasEmail = Boolean(email);
+
+  const waLink = hasWhatsApp
+    ? 'https://wa.me/' + number.replace(/\D/g, '') + '?text=' + encodeURIComponent(message)
+    : '#';
+  ['waNavBtn', 'waContactBtn'].forEach(id => {
+    const element = document.getElementById(id);
+    if (!element) return;
+    element.href = waLink;
+    element.setAttribute('aria-disabled', String(!hasWhatsApp));
+    element.classList.toggle('is-disabled', !hasWhatsApp);
+  });
+  setText('waDisplay', hasWhatsApp ? '+' + number.replace(/^\+/, '') : 'Contact number unavailable');
+
+  const emailLinks = document.querySelectorAll('a[href^="mailto:"], #emailContactBtn');
+  emailLinks.forEach(link => {
+    if (hasEmail) {
+      link.href = 'mailto:' + email;
+      link.textContent = 'Email ' + email;
+      link.removeAttribute('aria-disabled');
+      link.classList.remove('is-disabled');
+    } else {
+      link.removeAttribute('href');
+      link.textContent = 'Email unavailable';
+      link.setAttribute('aria-disabled', 'true');
+      link.classList.add('is-disabled');
+    }
+  });
+  setText('emailDisplay', hasEmail ? email : 'Email unavailable');
+}
 
 function renderProjectsGrid() {
+  const grid = document.getElementById('projectsGrid');
   if (!grid) return;
 
-  const displayList = (PROJECTS && PROJECTS.length > 0) ? PROJECTS : DEFAULT_PROJECTS;
-
-  grid.innerHTML = displayList.map(p => {
-    const projectUrl = normalizeProjectUrl(p.url);
-    const hasLink = isRealLink(projectUrl);
-    const cardClass = hasLink ? "project-card" : "project-card placeholder";
-    const primaryImg = getPrimaryThumb(p);
-    const secondaryImg = getSecondaryThumb(p);
-    const tertiaryImg = getTertiaryThumb(p);
-    const fallbackTechImg = getLocalPreview(p) || "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&auto=format&fit=crop";
-    const domainHost = hasLink ? new URL(projectUrl).host : 'website.com';
-
-    const thumb = hasLink
-      ? `<div class="browser-bar" aria-hidden="true">
-           <span class="dot red"></span>
-           <span class="dot yellow"></span>
-           <span class="dot green"></span>
-           <span class="browser-url">https://${domainHost}</span>
-         </div>
-         <div class="thumb-skeleton"></div>
-         <img src="${primaryImg}" 
-              alt="Live website screenshot of ${escapeHtml(p.title)}" 
-              loading="eager"
-              decoding="async"
-              onload="this.previousElementSibling.style.display='none'; this.style.opacity='1';"
-              style="opacity:0; transition: opacity 0.4s ease;"
-              onerror="if(!this.dataset.step){ this.dataset.step='1'; this.src='${secondaryImg}'; } else if(this.dataset.step==='1'){ this.dataset.step='2'; this.src='${tertiaryImg}'; } else if(this.dataset.step==='2'){ this.dataset.step='3'; this.onerror=null; this.previousElementSibling.style.display='none'; this.src='${fallbackTechImg}'; this.style.opacity='1'; }">`
-      : `<div class="no-preview">
-           <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M3 9h18" stroke="currentColor" stroke-width="1.6"/></svg>
-           <span>Add a link to preview</span>
-         </div>`;
-
-    return `
-    <a class="${cardClass}" href="${hasLink ? projectUrl : '#'}" target="_blank" rel="noopener">
-      <div class="project-thumb">
-        <span class="project-tag">${escapeHtml(p.tag || 'Web')}</span>
-        ${thumb}
-      </div>
-      <div class="project-body">
-        <div>
-          <h3>${escapeHtml(p.title)}</h3>
-          <p>${escapeHtml(p.description || '')}</p>
-        </div>
-        <span class="project-link">
-          View project
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M7 17 17 7M7 7h10v10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </span>
-      </div>
-    </a>
-  `;
-  }).join('');
-}
-
-// Instant synchronous render!
-renderProjectsGrid();
-
-// Background Supabase sync
-async function loadProjectsFromSupabase() {
-  try {
-    if (window.db) {
-      const { data, error } = await withTimeout(
-        window.db.from('projects').select('*').order('created_at', { ascending: false }),
-        2500
-      );
-
-      if (!error && data && data.length > 0) {
-        PROJECTS = data;
-        renderProjectsGrid();
-      }
-    }
-  } catch (e) {
-    console.log("Using local/default projects list");
+  if (contentStatus === 'loading') {
+    grid.innerHTML = '<div class="content-state">Loading projects from the database…</div>';
+    return;
   }
-}
-loadProjectsFromSupabase();
-
-async function loadContactFromSupabase() {
-  try {
-    if (!window.db) return;
-    const { data, error } = await withTimeout(
-      window.db.from('public_contact_settings').select('key,value').limit(20),
-      2500
-    );
-    if (!error && data && data.length > 0) {
-      Object.assign(CONFIG, Object.fromEntries(data.map(row => [row.key, row.value])));
-      applyContactConfig();
-    }
-  } catch (e) {
-    console.log("Using local/default contact settings");
+  if (contentStatus === 'error') {
+    grid.innerHTML = '<div class="content-state content-state--error">Projects are temporarily unavailable. Please try again later.</div>';
+    return;
   }
-}
-loadContactFromSupabase();
-
-/* ---------- Render Special Offers Grid ---------- */
-const offersGrid = document.getElementById('offersGrid');
-
-function renderOffersGrid() {
-  if (!offersGrid) return;
-
-  const activeOffers = (OFFERS && OFFERS.length > 0) ? OFFERS.filter(o => o.isActive !== false) : DEFAULT_OFFERS;
-
-  if (activeOffers.length === 0) {
-    offersGrid.innerHTML = `
-      <div class="promo-card featured">
-        <span class="promo-badge-tag">🔥 Weekend Promotion</span>
-        <h3 class="promo-title">Custom Business Website Package</h3>
-        <div class="promo-price-wrap">
-          <div class="promo-price-label">Promotional Package Price</div>
-          <div class="promo-price-val">$150 – $350</div>
-        </div>
-        <p class="promo-desc">We build custom responsive websites for amount up to amount to make your business perfect for clients and boost your online presence.</p>
-        <ul class="promo-features-list">
-          <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Full Responsive Mobile &amp; Desktop Design</li>
-          <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Ultra Fast Page Loading &amp; SEO Setup</li>
-          <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> WhatsApp Direct Chat &amp; Contact Integration</li>
-          <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> 1 Month Free Technical Support</li>
-        </ul>
-        <a href="${waLink}" target="_blank" class="btn btn-primary promo-cta-btn">Claim Weekend Deal via WhatsApp &rarr;</a>
-      </div>
-    `;
+  if (PROJECTS.length === 0) {
+    grid.innerHTML = '<div class="content-state">No projects have been published yet.</div>';
     return;
   }
 
-  offersGrid.innerHTML = activeOffers.map((o, idx) => {
-    const isFeatured = idx === 0;
-    const cardClass = isFeatured ? "promo-card featured" : "promo-card";
-    const featuresMarkup = (o.features || []).map(f => `
-      <li>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-        ${escapeHtml(f)}
-      </li>
-    `).join('');
+  grid.innerHTML = PROJECTS.map(project => {
+    const projectUrl = normalizeProjectUrl(project.url);
+    const hasLink = isRealLink(projectUrl);
+    const cardClass = hasLink ? 'project-card' : 'project-card placeholder';
+    const primaryImg = getPrimaryThumb(project);
+    const secondaryImg = getSecondaryThumb(project);
+    const tertiaryImg = getTertiaryThumb(project);
+    const domainHost = getProjectHost(projectUrl);
+    const title = escapeHtml(project.title || 'Untitled project');
+    const imageMarkup = primaryImg
+      ? `<div class="browser-bar" aria-hidden="true">
+           <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+           <span class="browser-url">${escapeHtml(domainHost)}</span>
+         </div>
+         <div class="thumb-skeleton"></div>
+         <img src="${escapeHtml(primaryImg)}"
+              alt="Live website screenshot of ${title}"
+              loading="lazy"
+              decoding="async"
+              onload="this.previousElementSibling.style.display='none'; this.style.opacity='1';"
+              style="opacity:0; transition: opacity 0.4s ease;"
+              onerror="if(!this.dataset.step){ this.dataset.step='1'; this.src='${escapeHtml(secondaryImg)}'; } else if(this.dataset.step==='1'){ this.dataset.step='2'; this.src='${escapeHtml(tertiaryImg)}'; } else { this.onerror=null; this.style.display='none'; this.previousElementSibling.style.display='none'; this.nextElementSibling.style.display='flex'; }">
+         <div class="preview-unavailable" style="display:none">Live preview unavailable</div>`
+      : `<div class="no-preview"><span>Preview unavailable</span></div>`;
 
-    const promoWaMessage = `Hello P&D Digital Solutions! I am interested in claiming your offer: ${o.title} (${o.priceRange || ''}).`;
-    const offerWaUrl = `https://wa.me/${CONFIG.whatsappNumber}?text=${encodeURIComponent(promoWaMessage)}`;
-
-    return `
-      <div class="${cardClass}">
-        <span class="promo-badge-tag">${escapeHtml(o.badge || '🔥 Weekend Special')}</span>
-        <h3 class="promo-title">${escapeHtml(o.title)}</h3>
-        <div class="promo-price-wrap">
-          <div class="promo-price-label">Offer Amount Range</div>
-          <div class="promo-price-val">${escapeHtml(o.priceRange || '$150 – $350')}</div>
-        </div>
-        <p class="promo-desc">${escapeHtml(o.description || 'We build custom websites for amount up to amount to make your business perfect for clients.')}</p>
-        <ul class="promo-features-list">
-          ${featuresMarkup}
-        </ul>
-        <a href="${offerWaUrl}" target="_blank" class="btn ${isFeatured ? 'btn-primary' : 'btn-ghost-dark'} promo-cta-btn">Claim Offer via WhatsApp &rarr;</a>
+    return `<a class="${cardClass}" href="${hasLink ? escapeHtml(projectUrl) : '#'}" target="_blank" rel="noopener">
+      <div class="project-thumb">
+        <span class="project-tag">${escapeHtml(project.tag || 'Web')}</span>
+        ${imageMarkup}
       </div>
-    `;
+      <div class="project-body">
+        <div><h3>${title}</h3><p>${escapeHtml(project.description || '')}</p></div>
+        <span class="project-link">View project
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M7 17 17 7M7 7h10v10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+      </div>
+    </a>`;
   }).join('');
 }
 
-// Instant synchronous render!
-renderOffersGrid();
+function renderOffersGrid() {
+  const grid = document.getElementById('offersGrid');
+  if (!grid) return;
 
-// Background Supabase sync
-async function loadOffersFromSupabase() {
+  if (contentStatus === 'loading') {
+    grid.innerHTML = '<div class="content-state">Loading offers from the database…</div>';
+    return;
+  }
+  if (contentStatus === 'error') {
+    grid.innerHTML = '<div class="content-state content-state--error">Offers are temporarily unavailable. Please try again later.</div>';
+    return;
+  }
+
+  const activeOffers = OFFERS.filter(offer => offer.isActive !== false);
+  if (activeOffers.length === 0) {
+    grid.innerHTML = '<div class="content-state">No active offers are available right now.</div>';
+    return;
+  }
+
+  grid.innerHTML = activeOffers.map((offer, index) => {
+    const featuresMarkup = (Array.isArray(offer.features) ? offer.features : []).map(feature => `
+      <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>${escapeHtml(feature)}</li>
+    `).join('');
+    const promoMessage = `Hello P&D Digital Solutions! I am interested in claiming your offer: ${offer.title} (${offer.priceRange || ''}).`;
+    const offerUrl = CONFIG.whatsappNumber
+      ? 'https://wa.me/' + String(CONFIG.whatsappNumber).replace(/\D/g, '') + '?text=' + encodeURIComponent(promoMessage)
+      : '#';
+    const featured = index === 0;
+
+    return `<div class="promo-card${featured ? ' featured' : ''}">
+      <span class="promo-badge-tag">${escapeHtml(offer.badge || 'Offer')}</span>
+      <h3 class="promo-title">${escapeHtml(offer.title || '')}</h3>
+      <div class="promo-price-wrap"><div class="promo-price-label">Offer Amount Range</div><div class="promo-price-val">${escapeHtml(offer.priceRange || '')}</div></div>
+      <p class="promo-desc">${escapeHtml(offer.description || '')}</p>
+      <ul class="promo-features-list">${featuresMarkup}</ul>
+      <a href="${escapeHtml(offerUrl)}" target="_blank" rel="noopener" class="btn ${featured ? 'btn-primary' : 'btn-ghost-dark'} promo-cta-btn">Claim Offer via WhatsApp &rarr;</a>
+    </div>`;
+  }).join('');
+}
+
+async function loadPublicContent() {
   try {
-    if (window.db) {
-      const { data, error } = await withTimeout(
-        window.db.from('offers').select('*').eq('isActive', true).order('created_at', { ascending: false }),
-        2500
-      );
+    if (!window.db) throw new Error('Database client is not available');
 
-      if (!error && data && data.length > 0) {
-        OFFERS = data;
-        renderOffersGrid();
-      }
-    }
-  } catch (e) {
-    console.log("Using local/default offers list");
+    const [projectsResult, offersResult, contactResult] = await Promise.all([
+      withTimeout(window.db.from('projects').select('*').order('created_at', { ascending: false })),
+      withTimeout(window.db.from('offers').select('*').eq('isActive', true).order('created_at', { ascending: false })),
+      withTimeout(window.db.from('public_contact_settings').select('key,value').limit(20))
+    ]);
+
+    if (projectsResult.error) throw projectsResult.error;
+    if (offersResult.error) throw offersResult.error;
+    if (contactResult.error) throw contactResult.error;
+
+    PROJECTS = Array.isArray(projectsResult.data) ? projectsResult.data : [];
+    OFFERS = Array.isArray(offersResult.data) ? offersResult.data : [];
+    Object.assign(CONFIG, Object.fromEntries((contactResult.data || []).map(row => [row.key, row.value])));
+    contentStatus = 'ready';
+    applyContactConfig();
+    renderProjectsGrid();
+    renderOffersGrid();
+  } catch (error) {
+    contentStatus = 'error';
+    console.error('[Public content] Database load failed:', error);
+    applyContactConfig();
+    renderProjectsGrid();
+    renderOffersGrid();
   }
 }
-loadOffersFromSupabase();
 
-/* ---------- Mobile Menu ---------- */
+setText('footerYear', '© ' + new Date().getFullYear() + ' P&D Digital Solutions. All rights reserved.');
+applyContactConfig();
+renderProjectsGrid();
+renderOffersGrid();
+loadPublicContent();
+
+const stripTrack = document.getElementById('stripTrack');
+if (stripTrack) {
+  const stripItems = ['Websites', 'Web apps', 'Full-stack systems', 'Digital transformation advisory', 'Google Business Profile setup', 'Social media management'];
+  const stripHtml = stripItems.map(item => `<span>${item}</span><span aria-hidden="true">·</span>`).join('');
+  stripTrack.innerHTML = stripHtml + stripHtml;
+}
+
 const menuToggle = document.getElementById('menuToggle');
 const mobileMenu = document.getElementById('mobileMenu');
 if (menuToggle && mobileMenu) {
   const desktopNav = document.querySelector('.nav-inner nav.links');
   if (desktopNav) mobileMenu.innerHTML = desktopNav.innerHTML;
-  
   menuToggle.addEventListener('click', () => {
     const open = mobileMenu.style.display === 'flex';
     mobileMenu.style.display = open ? 'none' : 'flex';
     menuToggle.setAttribute('aria-expanded', String(!open));
   });
-  mobileMenu.addEventListener('click', (e) => {
-    if (e.target.tagName === 'A') { mobileMenu.style.display = 'none'; }
+  mobileMenu.addEventListener('click', event => {
+    if (event.target.tagName === 'A') mobileMenu.style.display = 'none';
   });
 }
 
-/* ---------- Scroll Reveal ---------- */
 const revealEls = document.querySelectorAll('.reveal');
 if ('IntersectionObserver' in window) {
-  const io = new IntersectionObserver((entries) => {
+  const observer = new IntersectionObserver(entries => {
     entries.forEach(entry => {
       if (entry.isIntersecting) {
         entry.target.classList.add('in');
-        io.unobserve(entry.target);
+        observer.unobserve(entry.target);
       }
     });
   }, { threshold: 0.15 });
-  revealEls.forEach(el => io.observe(el));
+  revealEls.forEach(element => observer.observe(element));
 } else {
-  revealEls.forEach(el => el.classList.add('in'));
+  revealEls.forEach(element => element.classList.add('in'));
 }

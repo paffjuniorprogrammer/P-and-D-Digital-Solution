@@ -1068,3 +1068,32 @@
   white-space: nowrap;
   max-width: 70%;
 }
+
+
+/* ---------- Database content states ---------- */
+.content-state {
+  grid-column: 1 / -1;
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  background: rgba(255,255,255,0.72);
+  font-size: 14px;
+  text-align: center;
+}
+.content-state--error { color: #b42318; border-color: rgba(180,35,24,0.24); }
+.is-disabled { opacity: 0.58; cursor: not-allowed; pointer-events: none; }
+.preview-unavailable {
+  position: absolute;
+  inset: 28px 0 0;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255,255,255,0.5);
+  font: 10.5px 'JetBrains Mono', monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
